@@ -954,6 +954,7 @@ typedef struct settings
       /* Cheevos */
       bool cheevos_enable;
       bool cheevos_secondary_screen_enable;
+      bool cheevos_udp_broadcast_enable;
       bool cheevos_test_unofficial;
       bool cheevos_hardcore_mode_enable;
       bool cheevos_richpresence_enable;

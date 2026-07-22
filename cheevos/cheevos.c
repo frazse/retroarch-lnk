@@ -548,6 +548,67 @@ static void rcheevos_server_reconnected(void)
 extern void gfx_widgets_get_challenge_ids(unsigned* ids, unsigned* count);
 
 #if defined(ANDROID)
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <errno.h>
+
+static void rcheevos_broadcast_udp(const char* json)
+{
+   static int sock_v4 = -1;
+   static int sock_v6 = -1;
+   static struct sockaddr_in addr_v4_b;
+   static struct sockaddr_in addr_v4_l;
+   static struct sockaddr_in6 addr_v6_l;
+   static bool initialized = false;
+
+   if (!initialized)
+   {
+      sock_v4 = socket(AF_INET, SOCK_DGRAM, 0);
+      if (sock_v4 >= 0)
+      {
+         int broadcast = 1;
+         setsockopt(sock_v4, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast));
+
+         memset(&addr_v4_b, 0, sizeof(addr_v4_b));
+         addr_v4_b.sin_family = AF_INET;
+         addr_v4_b.sin_port = htons(55432);
+         addr_v4_b.sin_addr.s_addr = 0xFFFFFFFF;
+
+         memset(&addr_v4_l, 0, sizeof(addr_v4_l));
+         addr_v4_l.sin_family = AF_INET;
+         addr_v4_l.sin_port = htons(55432);
+         addr_v4_l.sin_addr.s_addr = inet_addr("127.0.0.1");
+      }
+
+      sock_v6 = socket(AF_INET6, SOCK_DGRAM, 0);
+      if (sock_v6 >= 0)
+      {
+         memset(&addr_v6_l, 0, sizeof(addr_v6_l));
+         addr_v6_l.sin6_family = AF_INET6;
+         addr_v6_l.sin6_port = htons(55432);
+         inet_pton(AF_INET6, "::1", &addr_v6_l.sin6_addr);
+      }
+
+      initialized = true;
+   }
+
+   if (json)
+   {
+      size_t len = strlen(json);
+      if (sock_v4 >= 0)
+      {
+         sendto(sock_v4, json, len, 0, (struct sockaddr*)&addr_v4_b, sizeof(addr_v4_b));
+         sendto(sock_v4, json, len, 0, (struct sockaddr*)&addr_v4_l, sizeof(addr_v4_l));
+      }
+      if (sock_v6 >= 0)
+      {
+         sendto(sock_v6, json, len, 0, (struct sockaddr*)&addr_v6_l, sizeof(addr_v6_l));
+      }
+   }
+}
+
 static void rcheevos_update_secondary_screen(void)
 {
    rjsonwriter_t* writer;
@@ -559,17 +620,8 @@ static void rcheevos_update_secondary_screen(void)
    unsigned challenge_ids[8];
    unsigned challenge_count = 0;
 
-   if (!env || !g_android || !g_android->updateSecondaryDisplay)
-   {
-      static bool logged_error = false;
-      if (!logged_error) {
-         RARCH_ERR("[DUAL] Error: env=%p, g_android=%p, method=%p\n", env, g_android, g_android ? g_android->updateSecondaryDisplay : NULL);
-         logged_error = true;
-      }
-      return;
-   }
-
-   if (!settings->bools.cheevos_secondary_screen_enable)
+   if (!settings->bools.cheevos_secondary_screen_enable &&
+       !settings->bools.cheevos_udp_broadcast_enable)
       return;
 
 #if defined(HAVE_GFX_WIDGETS)
@@ -640,9 +692,9 @@ static void rcheevos_update_secondary_screen(void)
       video_monitor_fps_statistics(&fps, &stddev, &samples);
       double frametime = (fps > 0) ? (1000.0 / fps) : 0;
 
-      if (g_android->getBatteryLevel)
+      if (env && g_android->getBatteryLevel)
          CALL_INT_METHOD(env, battery, g_android->activity->clazz, g_android->getBatteryLevel);
-      if (g_android->getPowerstate)
+      if (env && g_android->getPowerstate)
          CALL_INT_METHOD(env, powerstate, g_android->activity->clazz, g_android->getPowerstate);
 
       rjsonwriter_add_string(writer, "fps");
@@ -709,6 +761,12 @@ static void rcheevos_update_secondary_screen(void)
          uint32_t i, j;
          bool first = true;
 
+         /* Force a refresh of the achievement data to ensure progress strings are updated */
+         /* This ensures measured_progress strings like "4/8" are populated */
+         for (i = 0; rcheevos_locals.client && i < 1; i++) {
+             rc_client_do_frame(rcheevos_locals.client);
+         }
+
          if (list)
          {
             for (i = 0; i < list->num_buckets; i++)
@@ -758,12 +816,21 @@ static void rcheevos_update_secondary_screen(void)
 
                   rjsonwriter_add_string(writer, "progress_text");
                   rjsonwriter_add_colon(writer);
-                  rjsonwriter_add_string(writer, cheevo->measured_progress ? cheevo->measured_progress : "");
+                  {
+                     /* Correctly access the public_ member for progression text */
+                     const char* prog = cheevo->measured_progress;
+                     rjsonwriter_add_string(writer, (prog && prog[0]) ? prog : "");
+                  }
                   rjsonwriter_add_comma(writer);
 
                   rjsonwriter_add_string(writer, "progress_percent");
                   rjsonwriter_add_colon(writer);
                   rjsonwriter_add_double(writer, (double)cheevo->measured_percent);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "type");
+                  rjsonwriter_add_colon(writer);
+                  rjsonwriter_add_int(writer, (int)cheevo->type);
                   rjsonwriter_add_comma(writer);
 
                   rjsonwriter_add_string(writer, "is_challenge");
@@ -794,10 +861,16 @@ static void rcheevos_update_secondary_screen(void)
    json = rjsonwriter_get_memory_buffer(writer, &json_len);
    if (json)
    {
-      jstring jjson = (*env)->NewStringUTF(env, json);
-      if (jjson) {
-         CALL_VOID_METHOD_PARAM(env, g_android->activity->clazz, g_android->updateSecondaryDisplay, jjson);
-         (*env)->DeleteLocalRef(env, jjson);
+      if (settings->bools.cheevos_udp_broadcast_enable)
+         rcheevos_broadcast_udp(json);
+
+      if (settings->bools.cheevos_secondary_screen_enable && env && g_android && g_android->updateSecondaryDisplay)
+      {
+         jstring jjson = (*env)->NewStringUTF(env, json);
+         if (jjson) {
+            CALL_VOID_METHOD_PARAM(env, g_android->activity->clazz, g_android->updateSecondaryDisplay, jjson);
+            (*env)->DeleteLocalRef(env, jjson);
+         }
       }
    }
 

@@ -90,7 +90,11 @@ public class SecondaryDisplayPresentation extends Presentation {
                 ".achievement-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }" +
                 ".points { font-size: 11px; color: #FFD600; font-weight: 800; }" +
                 ".step-progress { font-size: 11px; color: #00BFA5; font-weight: bold; font-family: monospace; }" +
-                ".challenge-label { position: absolute; top: 0; right: 0; background: #FFD600; color: #000; font-size: 9px; font-weight: 900; padding: 1px 6px; border-bottom-left-radius: 6px; text-transform: uppercase; z-index: 2; }" +
+                ".badge-pill { position: absolute; top: 0; right: 0; font-size: 9px; font-weight: 900; padding: 1px 8px; border-bottom-left-radius: 6px; text-transform: uppercase; z-index: 2; color: #000; }" +
+                ".badge-missable { background: #FF5252; color: #FFF; }" +
+                ".badge-progression { background: #00BFA5; }" +
+                ".badge-win { background: #FFD600; }" +
+                ".badge-challenge { border: 1px solid #FFD600; background: rgba(255, 214, 0, 0.2); color: #FFD600; }" +
                 "</style>" +
                 "<script>" +
                 "function formatTemp(t) { return t > 0 ? (t/1000).toFixed(1) + '°' : '--'; }" +
@@ -116,7 +120,7 @@ public class SecondaryDisplayPresentation extends Presentation {
                 "    document.getElementById('progress-text').innerText = unlocked + ' / ' + total + ' (' + percent + '%)';" +
                 "    document.getElementById('progress-fill').style.width = percent + '%';" +
                 "    " +
-                "    const currentIds = data.achievements.map(a => a.title + a.unlocked + a.progress_text + a.is_challenge).join('|');" +
+                "    const currentIds = data.achievements.map(a => a.title + a.unlocked + a.progress_text + a.is_challenge + a.type).join('|');" +
                 "    if (currentIds === lastAchievementIds) return;" +
                 "    lastAchievementIds = currentIds;" +
                 "    const list = document.getElementById('achievement-list');" +
@@ -126,10 +130,20 @@ public class SecondaryDisplayPresentation extends Presentation {
                 "    data.achievements.forEach(a => {" +
                 "      const statusClass = a.unlocked ? 'unlocked' : (a.is_challenge ? 'challenge' : 'locked');" +
                 "      if(a.is_challenge) challengeId = 'cheevo-' + a.title.replace(/\\s+/g, '-');" +
-                "      const hasProgress = a.progress_text && a.progress_text !== '';" +
+                "      " +
+                "      /* Robust Step Progress check: ensure it's a non-empty string and not just '0%' or similar boilerplate */" +
+                "      const hasProgress = a.progress_text && a.progress_text.length > 0;" +
+                "      " +
                 "      const fillWidth = a.unlocked ? 100 : (a.progress_percent || 0);" +
+                "      " +
+                "      let typeBadge = '';" +
+                "      if (a.is_challenge) typeBadge = '<div class=\"badge-pill badge-challenge\">Active Challenge</div>';" +
+                "      else if (a.type === 1) typeBadge = '<div class=\"badge-pill badge-missable\">Missable</div>';" +
+                "      else if (a.type === 2) typeBadge = '<div class=\"badge-pill badge-progression\">Progression</div>';" +
+                "      else if (a.type === 3) typeBadge = '<div class=\"badge-pill badge-win\">Win Condition</div>';" +
+                "      " +
                 "      html += '<div id=\"' + (a.is_challenge ? challengeId : '') + '\" class=\"achievement ' + statusClass + '\">' +" +
-                "              (a.is_challenge ? '<div class=\"challenge-label\">Active Challenge</div>' : '') +" +
+                "              typeBadge +" +
                 "              '<div class=\"achievement-fill\" style=\"width:' + fillWidth + '%\"></div>' +" +
                 "              '<img class=\"icon\" src=\"' + (a.unlocked ? a.badge_url : a.badge_locked_url) + '\">' +" +
                 "              '<div class=\"info\">' +" +

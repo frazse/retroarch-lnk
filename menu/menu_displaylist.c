@@ -9520,6 +9520,7 @@ unsigned menu_displaylist_build_list(
             menu_displaylist_build_info_selective_t build_list[] = {
                {MENU_ENUM_LABEL_CHEEVOS_ENABLE,                                        PARSE_ONLY_BOOL,   true   },
                {MENU_ENUM_LABEL_CHEEVOS_SECONDARY_SCREEN_ENABLE,                        PARSE_ONLY_BOOL,   true   },
+               {MENU_ENUM_LABEL_CHEEVOS_UDP_BROADCAST_ENABLE,                           PARSE_ONLY_BOOL,   true   },
                {MENU_ENUM_LABEL_CHEEVOS_USERNAME,                                      PARSE_ONLY_STRING, false  },
                {MENU_ENUM_LABEL_CHEEVOS_PASSWORD,                                      PARSE_ONLY_STRING, false  },
                {MENU_ENUM_LABEL_CHEEVOS_APPEARANCE_SETTINGS,                           PARSE_ACTION,      false  },

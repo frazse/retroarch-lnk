@@ -7385,6 +7385,14 @@ MSG_HASH(
    "Achievements on Second Screen"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CHEEVOS_UDP_BROADCAST_ENABLE,
+   "Achievements UDP Broadcast"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CHEEVOS_UDP_BROADCAST_ENABLE,
+   "Enable real-time achievement and telemetry broadcast for companion apps."
+   )
+MSG_HASH(
    MENU_ENUM_SUBLABEL_CHEEVOS_RICHPRESENCE_ENABLE,
    "Periodically sends contextual game information to the RetroAchievements website. Has no effect if 'Hardcore Mode' is enabled."
    )
