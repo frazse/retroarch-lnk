@@ -22,8 +22,16 @@
 #include <streams/interface_stream.h>
 #include <streams/file_stream.h>
 #include <features/features_cpu.h>
+
+#if defined(ANDROID)
+#include <jni.h>
+#include "../frontend/drivers/platform_unix.h"
+#endif
+
 #include <formats/cdfs.h>
 #include <formats/m3u_file.h>
+#include <formats/rjson.h>
+#include <formats/rjson_helpers.h>
 #include <compat/strl.h>
 #include <retro_miscellaneous.h>
 #include <retro_math.h>
@@ -537,6 +545,266 @@ static void rcheevos_server_reconnected(void)
 #endif
 }
 
+extern void gfx_widgets_get_challenge_ids(unsigned* ids, unsigned* count);
+
+#if defined(ANDROID)
+static void rcheevos_update_secondary_screen(void)
+{
+   rjsonwriter_t* writer;
+   char* json;
+   int json_len;
+   settings_t* settings = config_get_ptr();
+   const rc_client_game_t* game = rc_client_get_game_info(rcheevos_locals.client);
+   JNIEnv* env = jni_thread_getenv();
+   unsigned challenge_ids[8];
+   unsigned challenge_count = 0;
+
+   if (!env || !g_android || !g_android->updateSecondaryDisplay)
+   {
+      static bool logged_error = false;
+      if (!logged_error) {
+         RARCH_ERR("[DUAL] Error: env=%p, g_android=%p, method=%p\n", env, g_android, g_android ? g_android->updateSecondaryDisplay : NULL);
+         logged_error = true;
+      }
+      return;
+   }
+
+   if (!settings->bools.cheevos_secondary_screen_enable)
+      return;
+
+#if defined(HAVE_GFX_WIDGETS)
+   if (gfx_widgets_ready())
+      gfx_widgets_get_challenge_ids(challenge_ids, &challenge_count);
+#endif
+
+   writer = rjsonwriter_open_memory();
+   if (!writer)
+      return;
+
+   rjsonwriter_add_start_object(writer);
+
+   /* Telemetry data */
+   {
+      double fps = 0, stddev = 0;
+      unsigned int samples = 0;
+      jint battery = 0;
+      jint powerstate = 0;
+      int temp_cpu = -1;
+      int temp_gpu = -1;
+      int gpu_util = 0;
+      double cpu_util = 0;
+      double power_w = 0;
+      FILE* f;
+
+      /* Temps */
+      f = fopen("/sys/class/thermal/thermal_zone31/temp", "r");
+      if (f) { if (fscanf(f, "%d", &temp_cpu) != 1) temp_cpu = -1; fclose(f); }
+      f = fopen("/sys/class/thermal/thermal_zone63/temp", "r");
+      if (f) { if (fscanf(f, "%d", &temp_gpu) != 1) temp_gpu = -1; fclose(f); }
+
+      /* GPU Util */
+      f = fopen("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage", "r");
+      if (f) { if (fscanf(f, "%d", &gpu_util) != 1) gpu_util = 0; fclose(f); }
+
+      /* CPU Util */
+      {
+         static unsigned long long last_user, last_nice, last_sys, last_idle;
+         unsigned long long user, nice, sys, idle, iowait, irq, softirq;
+         f = fopen("/proc/stat", "r");
+         if (f)
+         {
+            if (fscanf(f, "cpu %llu %llu %llu %llu %llu %llu %llu", &user, &nice, &sys, &idle, &iowait, &irq, &softirq) == 7)
+            {
+               unsigned long long diff_user = user - last_user;
+               unsigned long long diff_nice = nice - last_nice;
+               unsigned long long diff_sys = sys - last_sys;
+               unsigned long long diff_idle = idle - last_idle;
+               unsigned long long total = diff_user + diff_nice + diff_sys + diff_idle;
+               if (total > 0) cpu_util = (double)(total - diff_idle) * 100.0 / (double)total;
+               last_user = user; last_nice = nice; last_sys = sys; last_idle = idle;
+            }
+            fclose(f);
+         }
+      }
+
+      /* Power Draw */
+      {
+         long current_now = 0, voltage_now = 0;
+         f = fopen("/sys/class/power_supply/battery/current_now", "r");
+         if (f) { if (fscanf(f, "%ld", &current_now) != 1) current_now = 0; fclose(f); }
+         f = fopen("/sys/class/power_supply/battery/voltage_now", "r");
+         if (f) { if (fscanf(f, "%ld", &voltage_now) != 1) voltage_now = 0; fclose(f); }
+         power_w = (double)labs(current_now) * (double)voltage_now / 1000000000000.0;
+      }
+
+      video_monitor_fps_statistics(&fps, &stddev, &samples);
+      double frametime = (fps > 0) ? (1000.0 / fps) : 0;
+
+      if (g_android->getBatteryLevel)
+         CALL_INT_METHOD(env, battery, g_android->activity->clazz, g_android->getBatteryLevel);
+      if (g_android->getPowerstate)
+         CALL_INT_METHOD(env, powerstate, g_android->activity->clazz, g_android->getPowerstate);
+
+      rjsonwriter_add_string(writer, "fps");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_double(writer, fps);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "frametime");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_double(writer, frametime);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "battery");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_int(writer, (int)battery);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "power_state");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_int(writer, (int)powerstate);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "temp_cpu");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_int(writer, temp_cpu);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "temp_gpu");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_int(writer, temp_gpu);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "cpu_util");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_double(writer, cpu_util);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "gpu_util");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_int(writer, gpu_util);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "power_w");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_double(writer, power_w);
+   }
+
+   if (game && game->id != 0)
+   {
+      rjsonwriter_add_comma(writer);
+      rjsonwriter_add_string(writer, "game_title");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_string(writer, game->title);
+      rjsonwriter_add_comma(writer);
+
+      rjsonwriter_add_string(writer, "achievements");
+      rjsonwriter_add_colon(writer);
+      rjsonwriter_add_start_array(writer);
+
+      {
+         rc_client_achievement_list_t* list = rc_client_create_achievement_list(rcheevos_locals.client,
+            RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE_AND_UNOFFICIAL,
+            RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS);
+         uint32_t i, j;
+         bool first = true;
+
+         if (list)
+         {
+            for (i = 0; i < list->num_buckets; i++)
+            {
+               for (j = 0; j < list->buckets[i].num_achievements; j++)
+               {
+                  const rc_client_achievement_t* cheevo = list->buckets[i].achievements[j];
+                  char url[256];
+
+                  if (!first)
+                     rjsonwriter_add_comma(writer);
+                  first = false;
+
+                  rjsonwriter_add_start_object(writer);
+
+                  rjsonwriter_add_string(writer, "title");
+                  rjsonwriter_add_colon(writer);
+                  rjsonwriter_add_string(writer, cheevo->title);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "description");
+                  rjsonwriter_add_colon(writer);
+                  rjsonwriter_add_string(writer, cheevo->description);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "points");
+                  rjsonwriter_add_colon(writer);
+                  rjsonwriter_add_int(writer, (int)cheevo->points);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "unlocked");
+                  rjsonwriter_add_colon(writer);
+                  rjsonwriter_add_bool(writer, (cheevo->unlocked & RC_CLIENT_ACHIEVEMENT_UNLOCKED_BOTH) != 0);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "badge_url");
+                  rjsonwriter_add_colon(writer);
+                  rc_client_achievement_get_image_url(cheevo, RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED, url, sizeof(url));
+                  rjsonwriter_add_string(writer, url);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "badge_locked_url");
+                  rjsonwriter_add_colon(writer);
+                  rc_client_achievement_get_image_url(cheevo, RC_CLIENT_ACHIEVEMENT_STATE_ACTIVE, url, sizeof(url));
+                  rjsonwriter_add_string(writer, url);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "progress_text");
+                  rjsonwriter_add_colon(writer);
+                  rjsonwriter_add_string(writer, cheevo->measured_progress ? cheevo->measured_progress : "");
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "progress_percent");
+                  rjsonwriter_add_colon(writer);
+                  rjsonwriter_add_double(writer, (double)cheevo->measured_percent);
+                  rjsonwriter_add_comma(writer);
+
+                  rjsonwriter_add_string(writer, "is_challenge");
+                  rjsonwriter_add_colon(writer);
+                  {
+                     bool is_challenge = false;
+                     uint32_t c;
+                     for (c = 0; c < challenge_count; c++) {
+                        if (challenge_ids[c] == cheevo->id) {
+                           is_challenge = true;
+                           break;
+                        }
+                     }
+                     rjsonwriter_add_bool(writer, is_challenge);
+                  }
+
+                  rjsonwriter_add_end_object(writer);
+               }
+            }
+            rc_client_destroy_achievement_list(list);
+         }
+      }
+      rjsonwriter_add_end_array(writer);
+   }
+
+   rjsonwriter_add_end_object(writer);
+
+   json = rjsonwriter_get_memory_buffer(writer, &json_len);
+   if (json)
+   {
+      jstring jjson = (*env)->NewStringUTF(env, json);
+      if (jjson) {
+         CALL_VOID_METHOD_PARAM(env, g_android->activity->clazz, g_android->updateSecondaryDisplay, jjson);
+         (*env)->DeleteLocalRef(env, jjson);
+      }
+   }
+
+   rjsonwriter_free(writer);
+}
+#endif
+
 static void rcheevos_client_event_handler(const rc_client_event_t* event, rc_client_t* client)
 {
    switch (event->type)
@@ -547,15 +815,24 @@ static void rcheevos_client_event_handler(const rc_client_event_t* event, rc_cli
       break;
    case RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_SHOW:
       rcheevos_challenge_started(event->achievement);
+#if defined(ANDROID)
+      rcheevos_update_secondary_screen();
+#endif
       break;
    case RC_CLIENT_EVENT_ACHIEVEMENT_CHALLENGE_INDICATOR_HIDE:
       rcheevos_challenge_ended(event->achievement);
+#if defined(ANDROID)
+      rcheevos_update_secondary_screen();
+#endif
       break;
    case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_SHOW:
       rcheevos_progress_updated(&rcheevos_locals, event->achievement);
       break;
    case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_UPDATE:
       rcheevos_progress_updated(&rcheevos_locals, event->achievement);
+#if defined(ANDROID)
+      rcheevos_update_secondary_screen();
+#endif
       break;
    case RC_CLIENT_EVENT_ACHIEVEMENT_PROGRESS_INDICATOR_HIDE:
       rcheevos_progress_hide(&rcheevos_locals);
@@ -569,6 +846,9 @@ static void rcheevos_client_event_handler(const rc_client_event_t* event, rc_cli
 #endif
    case RC_CLIENT_EVENT_ACHIEVEMENT_TRIGGERED:
       rcheevos_award_achievement(event->achievement);
+#if defined(ANDROID)
+      rcheevos_update_secondary_screen();
+#endif
       break;
    case RC_CLIENT_EVENT_LEADERBOARD_STARTED:
       rcheevos_lboard_started(event->leaderboard);
@@ -1010,11 +1290,37 @@ void rcheevos_test(void)
       rc_client_do_frame(rcheevos_locals.client);
    else
       rc_client_idle(rcheevos_locals.client);
+
+#if defined(ANDROID)
+   if (rcheevos_locals.client)
+   {
+      static retro_time_t last_telemetry_push = 0;
+      retro_time_t now = cpu_features_get_time_usec();
+      if (now - last_telemetry_push >= 500000) /* 500ms */
+      {
+         rcheevos_update_secondary_screen();
+         last_telemetry_push = now;
+      }
+   }
+#endif
 }
 
 void rcheevos_idle(void)
 {
    rc_client_idle(rcheevos_locals.client);
+
+#if defined(ANDROID)
+   if (rcheevos_locals.client)
+   {
+      static retro_time_t last_telemetry_push = 0;
+      retro_time_t now = cpu_features_get_time_usec();
+      if (now - last_telemetry_push >= 2000000) /* 2s while idle */
+      {
+         rcheevos_update_secondary_screen();
+         last_telemetry_push = now;
+      }
+   }
+#endif
 }
 
 size_t rcheevos_get_serialize_size(void)
@@ -1437,6 +1743,10 @@ static void rcheevos_finalize_game_load_on_ui_thread(void)
 
 #ifdef HAVE_NETWORKING
    netplay_reinit_serialization();
+#endif
+
+#if defined(ANDROID)
+   rcheevos_update_secondary_screen();
 #endif
 }
 

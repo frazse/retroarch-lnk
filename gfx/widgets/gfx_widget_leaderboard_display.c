@@ -500,6 +500,24 @@ void gfx_widgets_clear_challenge_displays(void)
 #endif
 }
 
+void gfx_widgets_get_challenge_ids(unsigned* ids, unsigned* count)
+{
+   unsigned i;
+   gfx_widget_leaderboard_display_state_t* state = &p_w_leaderboard_display_st;
+
+#ifdef HAVE_THREADS
+   slock_lock(state->array_lock);
+#endif
+
+   *count = state->challenge_count;
+   for (i = 0; i < state->challenge_count; i++)
+      ids[i] = state->challenge_info[i].id;
+
+#ifdef HAVE_THREADS
+   slock_unlock(state->array_lock);
+#endif
+}
+
 void gfx_widgets_set_challenge_display(unsigned id, const char* badge)
 {
    unsigned i;

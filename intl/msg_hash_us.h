@@ -7381,8 +7381,16 @@ MSG_HASH(
    "Rich Presence"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CHEEVOS_SECONDARY_SCREEN_ENABLE,
+   "Achievements on Second Screen"
+   )
+MSG_HASH(
    MENU_ENUM_SUBLABEL_CHEEVOS_RICHPRESENCE_ENABLE,
    "Periodically sends contextual game information to the RetroAchievements website. Has no effect if 'Hardcore Mode' is enabled."
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CHEEVOS_SECONDARY_SCREEN_ENABLE,
+   "Show achievement list and progress on Android secondary displays."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_CHEEVOS_BADGES_ENABLE,

@@ -17,4 +17,4 @@
 #include "version_git.h"
 #define STR_(x) #x
 #define STR(x) STR_(x)
-const char retroarch_git_version[] = STR(GIT_VERSION);
+const char retroarch_git_version[] = "LNK_DUAL_SCREEN_V1";

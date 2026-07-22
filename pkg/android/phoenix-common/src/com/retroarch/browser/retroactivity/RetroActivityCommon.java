@@ -730,4 +730,8 @@ public class RetroActivityCommon extends NativeActivity
   public void accessibilitySpeak(String message) {
     getWindow().getDecorView().announceForAccessibility(message);
   }
+
+  public void updateSecondaryDisplay(String json) {
+    DualScreenSupport.updateSecondaryDisplay(this, json);
+  }
 }

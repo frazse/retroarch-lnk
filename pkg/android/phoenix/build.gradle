@@ -52,8 +52,8 @@ android {
       dimension "variant"
     }
     aarch64 {
-      applicationIdSuffix '.lnk.aarch64'
-      resValue "string", "app_name", "RetroArch Lnk (AArch64)"
+      applicationIdSuffix '.lnk.aarch64.dual'
+      resValue "string", "app_name", "RA Dual"
       buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
 
       dimension "variant"
