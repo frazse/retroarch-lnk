@@ -2122,7 +2122,6 @@ static struct config_bool_setting *populate_settings_bool(
 
 #ifdef HAVE_CHEEVOS
    SETTING_BOOL("cheevos_enable",                &settings->bools.cheevos_enable, true, DEFAULT_CHEEVOS_ENABLE, false);
-   SETTING_BOOL("cheevos_secondary_screen_enable", &settings->bools.cheevos_secondary_screen_enable, true, true, false);
    SETTING_BOOL("cheevos_udp_broadcast_enable", &settings->bools.cheevos_udp_broadcast_enable, true, true, false);
    SETTING_BOOL("cheevos_test_unofficial",       &settings->bools.cheevos_test_unofficial, true, false, false);
    SETTING_BOOL("cheevos_hardcore_mode_enable",  &settings->bools.cheevos_hardcore_mode_enable, true, true, false);

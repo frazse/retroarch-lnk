@@ -183,7 +183,6 @@ struct android_app
 
    jmethodID isScreenReaderEnabled;
    jmethodID accessibilitySpeak;
-   jmethodID updateSecondaryDisplay;
 
    struct
    {

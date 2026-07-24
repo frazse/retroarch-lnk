@@ -2195,8 +2195,6 @@ static void frontend_unix_init(void *data)
          "isScreenReaderEnabled", "()Z");
    GET_METHOD_ID(env, android_app->accessibilitySpeak, class,
          "accessibilitySpeak", "(Ljava/lang/String;)V");
-   GET_METHOD_ID(env, android_app->updateSecondaryDisplay, class,
-         "updateSecondaryDisplay", "(Ljava/lang/String;)V");
 
    CALL_BOOLEAN_METHOD(env, android_app->is_play_store_build, android_app->activity->clazz, android_app->isPlayStoreBuild)
 

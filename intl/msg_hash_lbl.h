@@ -589,10 +589,6 @@ MSG_HASH(
    "cheevos_richpresence_enable"
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_CHEEVOS_SECONDARY_SCREEN_ENABLE,
-   "cheevos_secondary_screen_enable"
-   )
-MSG_HASH(
    MENU_ENUM_LABEL_CHEEVOS_UDP_BROADCAST_ENABLE,
    "cheevos_udp_broadcast_enable"
    )

@@ -620,8 +620,7 @@ static void rcheevos_update_secondary_screen(void)
    unsigned challenge_ids[8];
    unsigned challenge_count = 0;
 
-   if (!settings->bools.cheevos_secondary_screen_enable &&
-       !settings->bools.cheevos_udp_broadcast_enable)
+   if (!settings->bools.cheevos_udp_broadcast_enable)
       return;
 
 #if defined(HAVE_GFX_WIDGETS)
@@ -863,15 +862,6 @@ static void rcheevos_update_secondary_screen(void)
    {
       if (settings->bools.cheevos_udp_broadcast_enable)
          rcheevos_broadcast_udp(json);
-
-      if (settings->bools.cheevos_secondary_screen_enable && env && g_android && g_android->updateSecondaryDisplay)
-      {
-         jstring jjson = (*env)->NewStringUTF(env, json);
-         if (jjson) {
-            CALL_VOID_METHOD_PARAM(env, g_android->activity->clazz, g_android->updateSecondaryDisplay, jjson);
-            (*env)->DeleteLocalRef(env, jjson);
-         }
-      }
    }
 
    rjsonwriter_free(writer);
