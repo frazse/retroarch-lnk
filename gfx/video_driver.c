@@ -483,6 +483,11 @@ video_driver_state_t *video_state_get_ptr(void)
    return &video_driver_st;
 }
 
+uint64_t video_driver_get_frame_count(void)
+{
+   return video_driver_st.frame_count;
+}
+
 #ifdef HAVE_THREADS
 void *video_thread_get_ptr(video_driver_state_t *video_st)
 {

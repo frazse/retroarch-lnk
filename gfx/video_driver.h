@@ -981,6 +981,8 @@ void *video_driver_get_ptr(void);
 
 video_driver_state_t *video_state_get_ptr(void);
 
+uint64_t video_driver_get_frame_count(void);
+
 bool video_driver_set_rotation(unsigned rotation);
 
 bool video_driver_set_video_mode(unsigned width,

@@ -688,7 +688,19 @@ static void rcheevos_update_secondary_screen(void)
          power_w = (double)labs(current_now) * (double)voltage_now / 1000000000000.0;
       }
 
-      video_monitor_fps_statistics(&fps, &stddev, &samples);
+      {
+         static retro_time_t last_time = 0;
+         static uint64_t last_frame_count = 0;
+         retro_time_t current_time = cpu_features_get_time_usec();
+         uint64_t current_frame_count = video_driver_get_frame_count();
+
+         if (last_time != 0 && current_time > last_time) {
+            fps = (double)(current_frame_count - last_frame_count) * 1000000.0 / (double)(current_time - last_time);
+         }
+
+         last_time = current_time;
+         last_frame_count = current_frame_count;
+      }
       double frametime = (fps > 0) ? (1000.0 / fps) : 0;
 
       if (env && g_android->getBatteryLevel)
